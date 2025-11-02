@@ -7,6 +7,8 @@ services:
     environment:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=votes
+    ports:
+      - "5432:5432"  # expose Postgres to host
     volumes:
       - db_data:/var/lib/postgresql/data
     networks: [vote-net]
@@ -21,7 +23,10 @@ services:
       - db
       - otel-collector
     ports:
-      - "8080:8080"
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: host
     networks: [vote-net]
 
   # --- React Frontend ---
@@ -30,7 +35,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "3000:3000"
+      - "3000:80"   # map host 3000 → Nginx port 80
     networks: [vote-net]
 
   # --- OpenTelemetry Collector ---
@@ -41,8 +46,15 @@ services:
       - ./otel-collector-config.yml:/etc/otel-collector-config.yml
     ports:
       - "4317:4317" # gRPC OTLP receiver
-      - "9464:9464" # Prometheus endpoint
+      - "9464:9464" # Prometheus scrape endpoint
     networks: [vote-net]
+
+  # --- debug backend-----
+  debug-backend:
+    image: ashes-vote-backend:debug
+    command: sleep infinity
+    networks: [vote-net]
+
 
 volumes:
   db_data:

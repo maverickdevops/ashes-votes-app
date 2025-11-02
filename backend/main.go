@@ -64,7 +64,44 @@ func main() {
 		break
 	}
 
+	// --- Automatic table creation & initialization ---
+	_, err = db.Exec(`
+	CREATE TABLE IF NOT EXISTS votes (
+		team TEXT PRIMARY KEY
+	);
+	`)
+	if err != nil {
+		log.Fatalf("failed to create votes table: %v", err)
+	}
+
+	for team := range allowedTeams {
+		_, err := db.Exec(`
+		INSERT INTO votes(team)
+		SELECT $1
+		WHERE NOT EXISTS (SELECT 1 FROM votes WHERE team=$1)
+		`, team)
+		if err != nil {
+			log.Fatalf("failed to initialize vote for %s: %v", team, err)
+		}
+	}
+
+	// --- Initialize App struct ---
 	app := &App{db: db}
+
+	// --- Wait until DB is reachable ---
+	deadline = time.Now().Add(30 * time.Second)
+	for {
+		if err := db.Ping(); err != nil {
+			if time.Now().After(deadline) {
+				log.Fatalf("db ping failed: %v", err)
+			}
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		break
+	}
+
+	app = &App{db: db}
 
 	// --- Register HTTP endpoints ---
 	http.HandleFunc("/health", healthHandler)
