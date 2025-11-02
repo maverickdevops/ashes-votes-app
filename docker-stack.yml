@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  # --- PostgreSQL ---
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=votes
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks: [vote-net]
+
+  # --- Go Backend ---
+  backend:
+    image: ashes-vote-backend:latest
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/votes?sslmode=disable
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+    depends_on:
+      - db
+      - otel-collector
+    ports:
+      - "8080:8080"
+    networks: [vote-net]
+
+  # --- React Frontend ---
+  frontend:
+    image: ashes-vote-frontend:latest
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    networks: [vote-net]
+
+  # --- OpenTelemetry Collector ---
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector-config.yml"]
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+    ports:
+      - "4317:4317" # gRPC OTLP receiver
+      - "9464:9464" # Prometheus endpoint
+    networks: [vote-net]
+
+volumes:
+  db_data:
+
+networks:
+  vote-net:
+    driver: overlay
